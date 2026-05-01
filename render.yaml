@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: vaxtrace-api
+    env: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # Set manually in Render dashboard
+      - key: JWT_SECRET_KEY
+        generateValue: true  # Render auto-generates a secure random value
+      - key: JWT_EXPIRE_MINUTES
+        value: 1440
+      - key: SQL_ECHO
+        value: false

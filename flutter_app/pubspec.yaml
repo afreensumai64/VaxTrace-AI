@@ -1,0 +1,50 @@
+name: vaxtrace_ai
+description: Predictive vaccine tracking and equity system for low-resource environments
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # Local database (offline-first SQLite)
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+  shared_preferences: ^2.2.3
+
+  # Networking
+  http: ^1.2.1
+  connectivity_plus: ^6.0.3
+
+  # Camera & Image
+  camera: ^0.10.5+9
+  image_picker: ^1.1.2
+
+  # OCR (Google ML Kit — on-device, no API key)
+  google_mlkit_text_recognition: ^0.13.0
+
+  # TTS — GuardianVoice (English / Hindi / Tamil)
+  flutter_tts: ^4.0.2
+
+  # Maps — flutter_map + OpenStreetMap (FREE, no API key required)
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
+
+  # Utilities
+  uuid: ^4.4.0
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/

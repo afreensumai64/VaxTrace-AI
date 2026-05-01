@@ -1,0 +1,34 @@
+# ─── Core API ────────────────────────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+gunicorn==22.0.0          # Used by Render.com web service
+
+# ─── Database ─────────────────────────────────────────────────────────────────
+sqlalchemy[asyncio]==2.0.30
+asyncpg==0.29.0
+alembic==1.13.1
+
+# ─── Validation ───────────────────────────────────────────────────────────────
+pydantic==2.7.1
+pydantic-settings==2.3.1
+python-multipart==0.0.9
+
+# ─── Auth — JWT (zero-cost, no external service required) ─────────────────────
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.3
+
+# ─── Auth — Firebase Admin (OPTIONAL — comment out if using JWT-only) ─────────
+# firebase-admin==6.5.0
+
+# ─── ML / Risk Engine ─────────────────────────────────────────────────────────
+# Pinned to lean versions — total model.pkl ≈ 2-5 MB, fits Render free 512 MB RAM
+xgboost==2.0.3
+scikit-learn==1.4.2
+joblib==1.4.0
+numpy==1.26.4
+pandas==2.2.2
+
+# ─── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+httpx==0.27.0
