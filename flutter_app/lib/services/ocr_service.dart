@@ -7,13 +7,19 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 
 class OcrResult {
   final String? childName;
+  final String? guardianName;
+  final String? vaccineName;
   final DateTime? lastDoseDate;
+  final DateTime? dateOfBirth;
   final String rawText;
   final bool success;
 
   const OcrResult({
     this.childName,
+    this.guardianName,
+    this.vaccineName,
     this.lastDoseDate,
+    this.dateOfBirth,
     required this.rawText,
     required this.success,
   });
@@ -34,11 +40,17 @@ class OcrService {
 
     final rawText = recognizedText.text;
     final childName = _extractChildName(rawText);
-    final lastDoseDate = _extractLastDoseDate(rawText);
+    final guardianName = _extractGuardianName(rawText);
+    final vaccineName = _extractVaccineName(rawText);
+    final lastDoseDate = _extractLastDoseDate(rawText, context: 'last_dose');
+    final dateOfBirth = _extractLastDoseDate(rawText, context: 'dob');
 
     return OcrResult(
       childName: childName,
+      guardianName: guardianName,
+      vaccineName: vaccineName,
       lastDoseDate: lastDoseDate,
+      dateOfBirth: dateOfBirth,
       rawText: rawText,
       success: childName != null || lastDoseDate != null,
     );
@@ -78,7 +90,28 @@ class OcrService {
     return null;
   }
 
-  DateTime? _extractLastDoseDate(String text) {
+  String? _extractGuardianName(String text) {
+    final patterns = [
+      RegExp(r"(?:Mother|Father|Guardian|Parent|Caregiver)\s*[:\-]\s*([A-Za-z\s]{2,40})", caseSensitive: false),
+      RegExp(r"(?:ماں|باپ|والدین)\s*[:\-]\s*([A-Za-z؀-ۿ\s]{2,40})", caseSensitive: false),
+    ];
+    for (final p in patterns) {
+      final m = p.firstMatch(text);
+      if (m?.group(1) != null) return m!.group(1)!.trim();
+    }
+    return null;
+  }
+
+  String? _extractVaccineName(String text) {
+    const vaccines = ['BCG', 'OPV', 'DTP', 'Pentavalent', 'Measles', 'MMR',
+        'Pneumococcal', 'PCV', 'Rotavirus', 'Hepatitis', 'IPV', 'MCV'];
+    for (final v in vaccines) {
+      if (text.contains(RegExp(v, caseSensitive: false))) return v;
+    }
+    return null;
+  }
+
+  DateTime? _extractLastDoseDate(String text, {String context = 'last_dose'}) {
     // Common date patterns on vaccination cards
     final datePatterns = [
       // DD/MM/YYYY or DD-MM-YYYY
@@ -88,18 +121,13 @@ class OcrService {
           caseSensitive: false),
     ];
 
-    // Look for context lines: "Last Dose", "Date Given", "DTP", etc.
-    final contextLines = text
-        .split('\n')
-        .where((line) => RegExp(
-              r'last\s*dose|date\s*given|administered|DTP|OPV|BCG|Measles|Polio',
-              caseSensitive: false,
-            ).hasMatch(line))
-        .toList();
+    // Look for context lines matching the requested context
+    final contextRegex = context == 'dob'
+        ? RegExp(r'date\s*of\s*birth|dob|born|تاریخ پیدائش', caseSensitive: false)
+        : RegExp(r'last\s*dose|date\s*given|administered|DTP|OPV|BCG|Measles|Polio', caseSensitive: false);
 
-    final searchText = contextLines.isNotEmpty
-        ? contextLines.join('\n')
-        : text;
+    final contextLines = text.split('\n').where((l) => contextRegex.hasMatch(l)).toList();
+    final searchText = contextLines.isNotEmpty ? contextLines.join('\n') : text;
 
     for (final pattern in datePatterns) {
       final match = pattern.firstMatch(searchText);

@@ -14,10 +14,10 @@ import '../services/tts_service.dart';
 import '../services/jwt_auth_service.dart';
 
 // ─────────────────────────────────────────────────────────
-// ⚠️  UPDATE THIS after deploying to Render.com:
-//     e.g. 'https://vaxtrace-api.onrender.com'
+// LOCAL DEV: physical device on same WiFi as this PC
+// RENDER DEPLOY: change back to 'https://vaxtrace-api.onrender.com'
 // ─────────────────────────────────────────────────────────
-const String _kBaseUrl = 'https://vaxtrace-api.onrender.com';
+const String _kBaseUrl = 'http://10.226.186.47:8000';
 
 // ─────────────────────────────────────────────
 // Core services
@@ -201,6 +201,78 @@ class OcrNotifier extends StateNotifier<OcrState> {
 final ocrNotifierProvider =
     StateNotifierProvider<OcrNotifier, OcrState>((ref) {
   return OcrNotifier(ref.watch(ocrServiceProvider));
+});
+
+// ─────────────────────────────────────────────
+// Single child by ID (SQLite — for reactive updates after prediction)
+// ─────────────────────────────────────────────
+
+final childByIdProvider = FutureProvider.family<Child?, String>((ref, childId) async {
+  ref.watch(childrenProvider);
+  final db = ref.read(databaseServiceProvider);
+  return db.getChild(childId);
+});
+
+// ─────────────────────────────────────────────
+// Risk prediction + AI explanation (per child)
+// ─────────────────────────────────────────────
+
+class RiskPredictionState {
+  final bool isLoading;
+  final String? error;
+  const RiskPredictionState({this.isLoading = false, this.error});
+}
+
+class RiskPredictionNotifier extends StateNotifier<RiskPredictionState> {
+  RiskPredictionNotifier(this._api, this._db, this._ref)
+      : super(const RiskPredictionState());
+
+  final ApiService _api;
+  final DatabaseService _db;
+  final Ref _ref;
+
+  Future<void> predict({
+    required String childId,
+    required double distanceKm,
+    required int daysSinceLastDose,
+  }) async {
+    state = const RiskPredictionState(isLoading: true);
+    try {
+      final result = await _api.predictRisk(
+        childId: childId,
+        distanceKm: distanceKm,
+        daysSinceLastDose: daysSinceLastDose,
+      );
+      final explanation = result['explanation'] as String?;
+      if (explanation != null && explanation.isNotEmpty) {
+        await _db.saveExplanation(childId, explanation);
+      }
+      _ref.invalidate(childByIdProvider(childId));
+      _ref.invalidate(highRiskChildrenProvider);
+      _ref.invalidate(childrenProvider);
+      state = const RiskPredictionState();
+    } catch (e) {
+      state = RiskPredictionState(error: e.toString());
+    }
+  }
+}
+
+final riskPredictionProvider = StateNotifierProvider.family<
+    RiskPredictionNotifier, RiskPredictionState, String>((ref, childId) {
+  return RiskPredictionNotifier(
+    ref.watch(apiServiceProvider),
+    ref.watch(databaseServiceProvider),
+    ref,
+  );
+});
+
+// ─────────────────────────────────────────────
+// Village stats (NGO dashboard — requires online)
+// ─────────────────────────────────────────────
+
+final villageStatsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final api = ref.watch(apiServiceProvider);
+  return api.getVillageStats();
 });
 
 // ─────────────────────────────────────────────

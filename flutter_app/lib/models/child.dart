@@ -49,6 +49,7 @@ class Child {
   final String? clientId;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? explanation;
 
   const Child({
     required this.id,
@@ -72,6 +73,7 @@ class Child {
     this.clientId,
     required this.createdAt,
     required this.updatedAt,
+    this.explanation,
   });
 
   int get ageInMonths {
@@ -118,6 +120,7 @@ class Child {
       clientId: json['client_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      explanation: json['explanation'] as String?,
     );
   }
 
@@ -143,6 +146,7 @@ class Child {
     'client_id': clientId,
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
+    'explanation': explanation,
   };
 
   Map<String, dynamic> toMap() => {
@@ -167,6 +171,7 @@ class Child {
     'client_id': clientId,
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
+    'explanation': explanation,
   };
 
   factory Child.fromMap(Map<String, dynamic> map) {
@@ -200,6 +205,7 @@ class Child {
       clientId: map['client_id'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
+      explanation: map['explanation'] as String?,
     );
   }
 
@@ -210,7 +216,7 @@ class Child {
     DateTime? lastDoseDate, String? lastVaccineName, DateTime? nextDueDate,
     double? riskScore, RiskLevel? riskLevel, bool? isHighRisk,
     bool? isSynced, SyncStatus? syncStatus, String? clientId,
-    DateTime? createdAt, DateTime? updatedAt,
+    DateTime? createdAt, DateTime? updatedAt, String? explanation,
   }) {
     return Child(
       id: id ?? this.id, name: name ?? this.name,
@@ -228,6 +234,7 @@ class Child {
       isHighRisk: isHighRisk ?? this.isHighRisk, isSynced: isSynced ?? this.isSynced,
       syncStatus: syncStatus ?? this.syncStatus, clientId: clientId ?? this.clientId,
       createdAt: createdAt ?? this.createdAt, updatedAt: updatedAt ?? this.updatedAt,
+      explanation: explanation ?? this.explanation,
     );
   }
 

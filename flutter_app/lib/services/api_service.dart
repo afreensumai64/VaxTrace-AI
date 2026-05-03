@@ -108,6 +108,22 @@ class ApiService {
     return list.map((e) => Child.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  Future<List<Child>> getDailyRoute({
+    double clinicLat = 30.3753,
+    double clinicLng = 72.8656,
+  }) async {
+    final data = await _get(
+      '/children/route?clinic_lat=$clinicLat&clinic_lng=$clinicLng',
+    ) as Map<String, dynamic>;
+    final list = data['children'] as List;
+    return list.map((e) => Child.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getVillageStats() async {
+    final data = await _get('/children/village-stats') as Map<String, dynamic>;
+    return List<Map<String, dynamic>>.from(data['villages'] as List);
+  }
+
   // ─────────────────────────────────────────────
   // Vaccination Records
   // ─────────────────────────────────────────────

@@ -24,7 +24,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -53,7 +53,8 @@ class DatabaseService {
         sync_status TEXT NOT NULL DEFAULT 'pending',
         client_id TEXT,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        explanation TEXT
       )
     ''');
 
@@ -85,7 +86,9 @@ class DatabaseService {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Future migration logic
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE children ADD COLUMN explanation TEXT');
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -166,6 +169,16 @@ class DatabaseService {
       {'is_synced': 1, 'sync_status': 'synced'},
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  Future<void> saveExplanation(String childId, String explanation) async {
+    final db = await database;
+    await db.update(
+      'children',
+      {'explanation': explanation},
+      where: 'id = ?',
+      whereArgs: [childId],
     );
   }
 

@@ -10,7 +10,7 @@ from app.models import (
     VaccinationRecordORM, VaccinationRecordCreate,
     VaccinationRecordOut, ChildORM, SyncStatus
 )
-from app.services.firebase_auth import get_current_user
+from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/vaccines", tags=["vaccines"])
 

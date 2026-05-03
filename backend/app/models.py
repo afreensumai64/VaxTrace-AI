@@ -237,6 +237,7 @@ class RiskScoreOut(BaseModel):
     days_since_last_dose: int
     model_version: str
     computed_at: datetime
+    explanation: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -273,6 +274,7 @@ class RiskPredictionRequest(BaseModel):
     child_id: str
     distance_from_clinic_km: float = Field(..., ge=0)
     days_since_last_dose: int = Field(..., ge=0)
+    language: str = Field(default="en", description="BCP-47 language code for explanation (reserved for future multilingual support)")
 
 class HighRiskListResponse(BaseModel):
     total: int

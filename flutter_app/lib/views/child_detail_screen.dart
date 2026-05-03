@@ -1,5 +1,5 @@
 // VaxTrace AI — Child Detail Screen
-// Full profile with vaccination history and GuardianVoice
+// Full profile with vaccination history, risk score, and AI explanation card
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,8 +14,12 @@ class ChildDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Watch for live updates (explanation cached after prediction)
+    final childAsync = ref.watch(childByIdProvider(child.id));
+    final liveChild = childAsync.asData?.value ?? child;
+
     final recordsAsync = ref.watch(vaccinationRecordsProvider(child.id));
-    final riskColor = VaxColors.riskColor(child.riskLevel.name);
+    final riskColor = VaxColors.riskColor(liveChild.riskLevel.name);
 
     return Scaffold(
       backgroundColor: VaxColors.deepNavy,
@@ -48,16 +52,16 @@ class ChildDetailScreen extends ConsumerWidget {
                           border: Border.all(color: riskColor, width: 3),
                         ),
                         child: Center(
-                          child: Text(child.name[0].toUpperCase(),
+                          child: Text(liveChild.name[0].toUpperCase(),
                               style: TextStyle(color: riskColor,
                                   fontWeight: FontWeight.w900, fontSize: 30)),
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Text(child.name,
+                      Text(liveChild.name,
                           style: const TextStyle(color: VaxColors.white,
                               fontSize: 22, fontWeight: FontWeight.w800)),
-                      Text('Guardian: ${child.guardianName}',
+                      Text('Guardian: ${liveChild.guardianName}',
                           style: const TextStyle(
                               color: VaxColors.textSecondary, fontSize: 14)),
                     ],
@@ -75,7 +79,7 @@ class ChildDetailScreen extends ConsumerWidget {
                   final lang = ref.read(languageProvider);
                   final tts = ref.read(ttsServiceProvider);
                   await tts.setLanguage(lang);
-                  await tts.speakVaccineReminder(child);
+                  await tts.speakVaccineReminder(liveChild);
                 },
               ),
               // Smart Route
@@ -85,7 +89,7 @@ class ChildDetailScreen extends ConsumerWidget {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => SmartRouteScreen(children: [child])),
+                      builder: (_) => SmartRouteScreen(children: [liveChild])),
                 ),
               ),
             ],
@@ -96,11 +100,17 @@ class ChildDetailScreen extends ConsumerWidget {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 // Risk score card
-                _RiskCard(child: child, riskColor: riskColor),
+                _RiskCard(child: liveChild, riskColor: riskColor),
                 const SizedBox(height: 16),
 
+                // AI Explanation card (only for high-risk)
+                if (liveChild.isHighRisk)
+                  _AiExplanationCard(child: liveChild),
+                if (liveChild.isHighRisk)
+                  const SizedBox(height: 16),
+
                 // Info grid
-                _InfoGrid(child: child),
+                _InfoGrid(child: liveChild),
                 const SizedBox(height: 20),
 
                 const Text('Vaccination History',
@@ -130,6 +140,187 @@ class ChildDetailScreen extends ConsumerWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────
+// AI Explanation Card (Hero Feature)
+// ─────────────────────────────────────────────
+
+class _AiExplanationCard extends ConsumerWidget {
+  final Child child;
+  const _AiExplanationCard({required this.child});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final predState = ref.watch(riskPredictionProvider(child.id));
+    final tts = ref.read(ttsServiceProvider);
+    final riskColor = VaxColors.riskColor(child.riskLevel.name);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: VaxColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: VaxColors.electricCyan.withOpacity(0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: VaxColors.electricCyan.withOpacity(0.06),
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.auto_awesome,
+                color: VaxColors.electricCyan, size: 16),
+            const SizedBox(width: 6),
+            const Text('AI Analysis',
+                style: TextStyle(
+                    color: VaxColors.electricCyan,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    letterSpacing: 0.5)),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: riskColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: riskColor.withOpacity(0.4)),
+              ),
+              child: Text(child.riskLevel.label.toUpperCase(),
+                  style: TextStyle(
+                      color: riskColor,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 10)),
+            ),
+          ]),
+          const SizedBox(height: 12),
+
+          if (predState.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Row(children: [
+                SizedBox(
+                  width: 18, height: 18,
+                  child: CircularProgressIndicator(
+                      color: VaxColors.electricCyan, strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Text('Analyzing with AI...',
+                    style: TextStyle(
+                        color: VaxColors.textSecondary, fontSize: 13)),
+              ]),
+            )
+          else if (predState.error != null)
+            _ErrorRow(error: predState.error!, onRetry: () => _runPrediction(ref))
+          else if (child.explanation != null && child.explanation!.isNotEmpty) ...[
+            Text(child.explanation!,
+                style: const TextStyle(
+                    color: VaxColors.white,
+                    fontSize: 14,
+                    height: 1.5)),
+            const SizedBox(height: 14),
+            Row(children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => tts.speak(child.explanation!),
+                  icon: const Icon(Icons.volume_up, size: 18),
+                  label: const Text('Listen'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: VaxColors.electricCyan,
+                    foregroundColor: VaxColors.deepNavy,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                onPressed: () => _runPrediction(ref),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Refresh'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: VaxColors.electricCyan,
+                  side: BorderSide(
+                      color: VaxColors.electricCyan.withOpacity(0.4)),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  textStyle: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ]),
+          ] else ...[
+            Text(
+              'Get an AI-generated explanation of why this child is at risk '
+              'and what action to take.',
+              style: const TextStyle(
+                  color: VaxColors.textSecondary, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _runPrediction(ref),
+                icon: const Icon(Icons.auto_awesome, size: 18),
+                label: const Text('Analyze Risk'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: VaxColors.electricCyan,
+                  foregroundColor: VaxColors.deepNavy,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  textStyle: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _runPrediction(WidgetRef ref) {
+    ref.read(riskPredictionProvider(child.id).notifier).predict(
+          childId: child.id,
+          distanceKm: child.distanceFromClinicKm,
+          daysSinceLastDose: child.daysSinceLastDose == 9999
+              ? 0
+              : child.daysSinceLastDose,
+        );
+  }
+}
+
+class _ErrorRow extends StatelessWidget {
+  final String error;
+  final VoidCallback onRetry;
+  const _ErrorRow({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      const Icon(Icons.error_outline,
+          color: VaxColors.riskCritical, size: 16),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text('Could not reach AI service. Check connection.',
+            style: const TextStyle(
+                color: VaxColors.textSecondary, fontSize: 12)),
+      ),
+      TextButton(
+        onPressed: onRetry,
+        child: const Text('Retry',
+            style: TextStyle(color: VaxColors.electricCyan, fontSize: 12)),
+      ),
+    ]);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Existing widgets (unchanged)
+// ─────────────────────────────────────────────
 
 class _RiskCard extends StatelessWidget {
   final Child child;

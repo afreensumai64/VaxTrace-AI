@@ -8,6 +8,7 @@ import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import '../providers/providers.dart';
 import '../models/child.dart';
+import '../services/ocr_service.dart';
 import '../theme.dart';
 
 class SnapCardScreen extends ConsumerStatefulWidget {
@@ -23,7 +24,9 @@ class _SnapCardScreenState extends ConsumerState<SnapCardScreen> {
   final _phoneCtrl = TextEditingController();
   final _villageCtrl = TextEditingController();
   final _distanceCtrl = TextEditingController(text: '0');
+  final _vaccineCtrl = TextEditingController();
   DateTime? _lastDoseDate;
+  DateTime? _dateOfBirth;
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
 
@@ -34,6 +37,7 @@ class _SnapCardScreenState extends ConsumerState<SnapCardScreen> {
     _phoneCtrl.dispose();
     _villageCtrl.dispose();
     _distanceCtrl.dispose();
+    _vaccineCtrl.dispose();
     super.dispose();
   }
 
@@ -52,16 +56,19 @@ class _SnapCardScreenState extends ConsumerState<SnapCardScreen> {
     final ocrNotifier = ref.read(ocrNotifierProvider.notifier);
     await ocrNotifier.scan(_capturedImage!);
 
-    // Auto-fill form
-    final ocrState = ref.read(ocrNotifierProvider);
-    if (ocrState.result != null) {
-      if (ocrState.result!.childName != null) {
-        _nameCtrl.text = ocrState.result!.childName!;
-      }
-      if (ocrState.result!.lastDoseDate != null) {
-        setState(() => _lastDoseDate = ocrState.result!.lastDoseDate);
-      }
-    }
+    _applyOcrResult();
+  }
+
+  void _applyOcrResult() {
+    final result = ref.read(ocrNotifierProvider).result;
+    if (result == null) return;
+    if (result.childName != null) _nameCtrl.text = result.childName!;
+    if (result.guardianName != null) _guardianCtrl.text = result.guardianName!;
+    if (result.vaccineName != null) _vaccineCtrl.text = result.vaccineName!;
+    setState(() {
+      if (result.lastDoseDate != null) _lastDoseDate = result.lastDoseDate;
+      if (result.dateOfBirth != null) _dateOfBirth = result.dateOfBirth;
+    });
   }
 
   Future<void> _pickFromGallery() async {
@@ -71,11 +78,7 @@ class _SnapCardScreenState extends ConsumerState<SnapCardScreen> {
     setState(() => _capturedImage = File(picked.path));
     final ocrNotifier = ref.read(ocrNotifierProvider.notifier);
     await ocrNotifier.scan(_capturedImage!);
-    final ocrState = ref.read(ocrNotifierProvider);
-    if (ocrState.result?.childName != null) _nameCtrl.text = ocrState.result!.childName!;
-    if (ocrState.result?.lastDoseDate != null) {
-      setState(() => _lastDoseDate = ocrState.result!.lastDoseDate);
-    }
+    _applyOcrResult();
   }
 
   Future<void> _saveChild() async {
@@ -85,7 +88,7 @@ class _SnapCardScreenState extends ConsumerState<SnapCardScreen> {
     try {
       final child = Child.createNew(
         name: _nameCtrl.text.trim(),
-        dateOfBirth: DateTime.now().subtract(const Duration(days: 365)),
+        dateOfBirth: _dateOfBirth ?? DateTime.now().subtract(const Duration(days: 365)),
         guardianName: _guardianCtrl.text.trim(),
         guardianPhone: _phoneCtrl.text.trim(),
         villageId: _villageCtrl.text.trim().toLowerCase().replaceAll(' ', '_'),
@@ -93,10 +96,10 @@ class _SnapCardScreenState extends ConsumerState<SnapCardScreen> {
         distanceFromClinicKm: double.tryParse(_distanceCtrl.text) ?? 0,
       );
 
-      // Apply last dose date if captured
-      final finalChild = _lastDoseDate != null
-          ? child.copyWith(lastDoseDate: _lastDoseDate)
-          : child;
+      final finalChild = child.copyWith(
+        lastDoseDate: _lastDoseDate,
+        lastVaccineName: _vaccineCtrl.text.trim().isNotEmpty ? _vaccineCtrl.text.trim() : null,
+      );
 
       await ref.read(childrenProvider.notifier).addChild(finalChild);
 
@@ -237,28 +240,25 @@ class _SnapCardScreenState extends ConsumerState<SnapCardScreen> {
                 ),
               ]),
 
-              // OCR result banner
+              // OCR confirm card
               if (ocrState.result != null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+                _OcrConfirmCard(result: ocrState.result!),
+              ],
+              if (ocrState.error != null) ...[
+                const SizedBox(height: 10),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: VaxColors.riskLow.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: VaxColors.riskLow.withOpacity(0.4)),
+                    color: VaxColors.riskCritical.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: VaxColors.riskCritical.withOpacity(0.4)),
                   ),
                   child: Row(children: [
-                    const Icon(Icons.check_circle,
-                        color: VaxColors.riskLow, size: 18),
+                    const Icon(Icons.error_outline, color: VaxColors.riskCritical, size: 16),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'OCR extracted: ${ocrState.result!.childName ?? "name"}'
-                        '${ocrState.result!.lastDoseDate != null ? " · ${ocrState.result!.lastDoseDate!.day}/${ocrState.result!.lastDoseDate!.month}/${ocrState.result!.lastDoseDate!.year}" : ""}',
-                        style: const TextStyle(
-                            color: VaxColors.riskLow, fontSize: 13),
-                      ),
-                    ),
+                    Expanded(child: Text('OCR failed — fill form manually',
+                        style: const TextStyle(color: VaxColors.riskCritical, fontSize: 12))),
                   ]),
                 ),
               ],
@@ -287,6 +287,53 @@ class _SnapCardScreenState extends ConsumerState<SnapCardScreen> {
               const SizedBox(height: 12),
               _buildField(_distanceCtrl, 'Distance from Clinic (km)',
                   Icons.directions_walk, keyboard: TextInputType.number),
+              const SizedBox(height: 12),
+              _buildField(_vaccineCtrl, 'Last Vaccine Given', Icons.vaccines),
+              const SizedBox(height: 12),
+
+              // Date of birth
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _dateOfBirth ?? DateTime.now().subtract(const Duration(days: 365)),
+                    firstDate: DateTime(2010),
+                    lastDate: DateTime.now(),
+                    builder: (ctx, child) => Theme(
+                      data: ThemeData.dark().copyWith(
+                        colorScheme: const ColorScheme.dark(
+                          primary: VaxColors.electricCyan,
+                          surface: VaxColors.surface,
+                        ),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) setState(() => _dateOfBirth = picked);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: VaxColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.cake, color: VaxColors.electricCyan, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _dateOfBirth != null
+                            ? 'Date of Birth: ${_dateOfBirth!.day}/${_dateOfBirth!.month}/${_dateOfBirth!.year}'
+                            : 'Date of Birth (optional)',
+                        style: TextStyle(
+                          color: _dateOfBirth != null ? VaxColors.white : VaxColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.calendar_today, color: VaxColors.textSecondary, size: 18),
+                  ]),
+                ),
+              ),
               const SizedBox(height: 12),
 
               // Last dose date
@@ -371,6 +418,78 @@ class _SnapCardScreenState extends ConsumerState<SnapCardScreen> {
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: VaxColors.electricCyan, size: 20),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// OCR Confirm Card — shows extracted fields with tick marks
+// ─────────────────────────────────────────────
+
+class _OcrConfirmCard extends StatelessWidget {
+  final OcrResult result;
+  const _OcrConfirmCard({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final fields = <({String label, String? value})>[
+      (label: 'Child Name', value: result.childName),
+      (label: 'Guardian', value: result.guardianName),
+      (label: 'Vaccine', value: result.vaccineName),
+      (label: 'Last Dose', value: result.lastDoseDate != null
+          ? '${result.lastDoseDate!.day}/${result.lastDoseDate!.month}/${result.lastDoseDate!.year}'
+          : null),
+      (label: 'Date of Birth', value: result.dateOfBirth != null
+          ? '${result.dateOfBirth!.day}/${result.dateOfBirth!.month}/${result.dateOfBirth!.year}'
+          : null),
+    ];
+    final extracted = fields.where((f) => f.value != null).toList();
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: VaxColors.riskLow.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: VaxColors.riskLow.withOpacity(0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.auto_awesome, color: VaxColors.electricCyan, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              extracted.isEmpty
+                  ? 'OCR complete — fill fields manually'
+                  : 'OCR extracted ${extracted.length} field${extracted.length == 1 ? "" : "s"} — review below',
+              style: const TextStyle(
+                  color: VaxColors.electricCyan,
+                  fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+          ]),
+          if (extracted.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...extracted.map((f) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(children: [
+                const Icon(Icons.check_circle, color: VaxColors.riskLow, size: 14),
+                const SizedBox(width: 6),
+                Text('${f.label}: ',
+                    style: const TextStyle(color: VaxColors.textSecondary, fontSize: 12)),
+                Expanded(
+                  child: Text(f.value!,
+                      style: const TextStyle(color: VaxColors.white,
+                          fontWeight: FontWeight.w600, fontSize: 12),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ]),
+            )),
+            const SizedBox(height: 6),
+            const Text('Fields auto-filled below — edit if incorrect',
+                style: TextStyle(color: VaxColors.textSecondary, fontSize: 11)),
+          ],
+        ],
       ),
     );
   }

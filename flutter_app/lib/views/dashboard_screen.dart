@@ -7,6 +7,7 @@ import '../providers/providers.dart';
 import '../models/child.dart';
 import '../theme.dart';
 import 'smart_route_screen.dart';
+import 'child_detail_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -54,10 +55,18 @@ class DashboardScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
 
+          // Today's Route CTA
+          highRiskAsync.when(
+            data: (children) => _TodayRouteCard(children: children),
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 16),
+
           // Sync status
           _SyncCard(syncState: syncState, onSync: () =>
               ref.read(syncNotifierProvider.notifier).sync()),
-          const SizedBox(height: 20),
+          const SizedBox(height: 20);
 
           // High-risk children
           Row(children: [
@@ -111,6 +120,10 @@ class DashboardScreen extends ConsumerWidget {
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
           ),
+          const SizedBox(height: 20),
+
+          // Village zones (NGO view — online only)
+          _VillageZonesSection(),
         ],
       ),
     );
@@ -239,52 +252,304 @@ class _SyncCard extends StatelessWidget {
   }
 }
 
-class _HighRiskTile extends StatelessWidget {
+class _HighRiskTile extends ConsumerWidget {
   final Child child;
   const _HighRiskTile({required this.child});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final riskColor = VaxColors.riskColor(child.riskLevel.name);
+    final tts = ref.read(ttsServiceProvider);
+    final hasExplanation =
+        child.explanation != null && child.explanation!.isNotEmpty;
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ChildDetailScreen(child: child)),
+      ),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: VaxColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: riskColor.withOpacity(0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: riskColor.withOpacity(0.15),
+                ),
+                child: Center(
+                  child: Text(child.name[0],
+                      style: TextStyle(color: riskColor,
+                          fontWeight: FontWeight.w800)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(child.name,
+                        style: const TextStyle(color: VaxColors.white,
+                            fontWeight: FontWeight.w600, fontSize: 14)),
+                    Text(
+                        '${child.villageName} · ${child.distanceFromClinicKm.toStringAsFixed(1)}km',
+                        style: const TextStyle(
+                            color: VaxColors.textSecondary, fontSize: 12)),
+                  ],
+                ),
+              ),
+              Text('${child.riskScore.toStringAsFixed(0)}',
+                  style: TextStyle(
+                      color: riskColor,
+                      fontWeight: FontWeight.w900, fontSize: 18)),
+              if (hasExplanation) ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => tts.speak(child.explanation!),
+                  child: Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: VaxColors.electricCyan.withOpacity(0.12),
+                    ),
+                    child: const Icon(Icons.volume_up,
+                        color: VaxColors.electricCyan, size: 16),
+                  ),
+                ),
+              ],
+            ]),
+            if (hasExplanation) ...[
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.only(left: 46),
+                child: Text(
+                  child.explanation!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: VaxColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.4),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TodayRouteCard extends StatelessWidget {
+  final List<Child> children;
+  const _TodayRouteCard({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final criticalCount = children.where((c) => c.riskLevel == RiskLevel.critical).length;
+    final highCount = children.where((c) => c.riskLevel == RiskLevel.high).length;
+
+    return GestureDetector(
+      onTap: children.isNotEmpty
+          ? () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => SmartRouteScreen(children: children)))
+          : null,
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [VaxColors.electricCyan.withOpacity(0.18), VaxColors.riskHigh.withOpacity(0.12)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: VaxColors.electricCyan.withOpacity(0.5), width: 1.5),
+        ),
+        child: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: VaxColors.electricCyan.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.route, color: VaxColors.electricCyan, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text("Today's Route",
+                  style: TextStyle(color: VaxColors.white,
+                      fontWeight: FontWeight.w800, fontSize: 16)),
+              const SizedBox(height: 3),
+              Text(
+                children.isEmpty
+                    ? 'No high-risk children today'
+                    : '${children.length} visits · $criticalCount critical · $highCount high',
+                style: const TextStyle(color: VaxColors.textSecondary, fontSize: 12),
+              ),
+            ]),
+          ),
+          if (children.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: VaxColors.electricCyan,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text('Open Map',
+                  style: TextStyle(color: VaxColors.deepNavy,
+                      fontWeight: FontWeight.w800, fontSize: 13)),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _NoHighRisk extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: VaxColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: riskColor.withOpacity(0.4)),
+        border: Border.all(color: VaxColors.navyLight),
+      ),
+      child: const Center(
+        child: Column(children: [
+          Icon(Icons.check_circle, color: VaxColors.riskLow, size: 36),
+          SizedBox(height: 8),
+          Text('No high-risk children today',
+              style: TextStyle(color: VaxColors.textSecondary)),
+        ]),
+      ),
+    );
+  }
+}
+
+class _VillageZonesSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statsAsync = ref.watch(villageStatsProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: VaxColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: VaxColors.navyLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.map, color: VaxColors.electricCyan, size: 16),
+            const SizedBox(width: 6),
+            const Text('Village Zones',
+                style: TextStyle(color: VaxColors.white,
+                    fontWeight: FontWeight.w700, fontSize: 14)),
+            const Spacer(),
+            TextButton(
+              onPressed: () => ref.invalidate(villageStatsProvider),
+              style: TextButton.styleFrom(
+                  minimumSize: Size.zero, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+              child: const Text('Refresh', style: TextStyle(
+                  color: VaxColors.electricCyan, fontSize: 11)),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          const Text('Requires online connection',
+              style: TextStyle(color: VaxColors.textSecondary, fontSize: 11)),
+          const SizedBox(height: 12),
+          statsAsync.when(
+            loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(color: VaxColors.electricCyan, strokeWidth: 2),
+                )),
+            error: (e, _) => Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(children: [
+                const Icon(Icons.wifi_off, color: VaxColors.textSecondary, size: 16),
+                const SizedBox(width: 8),
+                const Text('Offline — village data unavailable',
+                    style: TextStyle(color: VaxColors.textSecondary, fontSize: 12)),
+              ]),
+            ),
+            data: (villages) => Column(
+              children: villages.map((v) => _VillageZoneTile(village: v)).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VillageZoneTile extends StatelessWidget {
+  final Map<String, dynamic> village;
+  const _VillageZoneTile({required this.village});
+
+  @override
+  Widget build(BuildContext context) {
+    final zone = village['zone'] as String;
+    final color = VaxColors.riskColor(zone);
+    final total = village['total_children'] as int;
+    final highRisk = village['high_risk_count'] as int;
+    final coverage = village['coverage_pct'] as double;
+    final avgScore = village['avg_risk_score'] as double;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: VaxColors.surfaceLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.35)),
       ),
       child: Row(children: [
         Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: riskColor.withOpacity(0.15),
-          ),
-          child: Center(
-            child: Text(child.name[0],
-                style: TextStyle(color: riskColor,
-                    fontWeight: FontWeight.w800)),
-          ),
+          width: 10, height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(child.name,
-                  style: const TextStyle(color: VaxColors.white,
-                      fontWeight: FontWeight.w600, fontSize: 14)),
-              Text('${child.villageName} · ${child.distanceFromClinicKm.toStringAsFixed(1)}km',
-                  style: const TextStyle(
-                      color: VaxColors.textSecondary, fontSize: 12)),
-            ],
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(village['village_name'] as String,
+                style: const TextStyle(color: VaxColors.white,
+                    fontWeight: FontWeight.w600, fontSize: 13)),
+            const SizedBox(height: 2),
+            Text('$total children · $highRisk high-risk · ${coverage.toStringAsFixed(0)}% covered',
+                style: const TextStyle(color: VaxColors.textSecondary, fontSize: 11)),
+          ]),
         ),
-        Text('${child.riskScore.toStringAsFixed(0)}',
-            style: TextStyle(
-                color: riskColor,
-                fontWeight: FontWeight.w900, fontSize: 18)),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(zone.toUpperCase(),
+                style: TextStyle(color: color, fontSize: 10,
+                    fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+          ),
+          const SizedBox(height: 3),
+          Text('${avgScore.toStringAsFixed(0)} avg',
+              style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13)),
+        ]),
       ]),
     );
   }
